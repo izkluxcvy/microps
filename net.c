@@ -83,6 +83,11 @@ net_device_output(struct net_device *dev, uint16_t type, const uint8_t *data, si
 }
 
 int
+net_input(uint16_t type, const uint8_t *data, size_t len, struct net_device *dev)
+{
+}
+
+int
 net_init(void)
 {
     infof( "initialize...");
