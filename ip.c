@@ -17,6 +17,12 @@
 
 #define IP_HDR_OFFSET_MASK 0x1fff
 
+struct ip_protocol {
+    struct ip_protocol *next;
+    uint8_t protocol;
+    ip_protocol_handler_t handler;
+};
+
 const ip_addr_t IP_ADDR_ANY       = 0x00000000; /* 0.0.0.0 */
 const ip_addr_t IP_ADDR_BROADCAST = 0xffffffff; /* 255.255.255.255 */
 
@@ -25,6 +31,7 @@ const ip_addr_t IP_ADDR_BROADCAST = 0xffffffff; /* 255.255.255.255 */
  *       you need to protect these lists with a mutex.
  */
 static struct ip_iface *ifaces;
+static struct ip_protocol *protocols;
 
 int
 ip_addr_pton(const char *p, ip_addr_t *n)
@@ -119,6 +126,14 @@ ip_iface_select(ip_addr_t addr)
         }
     }
     return entry;
+}
+
+/*
+ * NOTE: must not be call after net_run()
+ */
+int
+ip_protocol_register(uint8_t protocol, ip_protocol_handler_t handler)
+{
 }
 
 static void
