@@ -34,6 +34,8 @@ struct net_device {
     uint16_t alen;
     uint8_t addr[NET_DEVICE_ADDR_LEN];
     uint8_t broadcast[NET_DEVICE_ADDR_LEN];
+    struct net_device_ops *ops;
+    void *priv;
 };
 
 struct net_device_ops {
