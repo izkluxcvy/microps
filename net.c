@@ -115,15 +115,45 @@ net_device_output(struct net_device *dev, uint16_t type, const uint8_t *data, si
 int
 net_protocol_register(uint16_t type, net_protocol_handler_t handler)
 {
+    struct net_protocol *proto;
+
+    for (proto = protocols; proto; proto = proto->next) {
+        if (type == proto->type) {
+            errorf("already registered, type=0x%04x", type);
+            return -1;
+        }
+    }
+    proto = memory_alloc(sizeof(*proto));
+    if (!proto) {
+        errorf("memory_alloc() failure");
+        return -1;
+    }
+    proto->type = type;
+    proto->handler = handler;
+    proto->next = protocols;
+    protocols = proto;
+    infof("success, type=0x%04x", type);
+    return 0;
 }
 
 int
 net_input(uint16_t type, const uint8_t *data, size_t len, struct net_device *dev)
 {
+    struct net_protocol *proto;
+
     debugf("dev=%s, type=0x%04x, len=%zu", dev->name, type, len);
     debugdump(data, len);
+    for (proto = protocols; proto; proto = proto->next) {
+        if (proto->type == type) {
+            proto->handler(data, len, dev);
+            return 0;
+        }
+    }
+    /* unsupported protocol */
     return 0;
 }
+
+#include "ip.h"
 
 int
 net_init(void)
@@ -131,6 +161,10 @@ net_init(void)
     infof( "initialize...");
     if (platform_init() == -1) {
         errorf( "platform_init() failure");
+        return -1;
+    }
+    if (ip_init() == -1) {
+        errorf( "ip_init() failure");
         return -1;
     }
     infof( "success");
