@@ -56,3 +56,7 @@ dkms.conf
 
 # Dependencies
 .deps/
+
+# clangd
+compile_commands.json
+.cache/
