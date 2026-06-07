@@ -104,9 +104,9 @@ app_main(void)
     uint8_t buf[128];
     ssize_t n;
 
-    ip_endp_pton("0.0.0.0:7", &local);
-    ip_endp_pton("0.0.0.0:0", &remote);
-    desc = tcp_cmd_open(local, remote, 0);
+    ip_endp_pton("0.0.0.0:0", &local);
+    ip_endp_pton("192.0.2.1:10007", &remote);
+    desc = tcp_cmd_open(local, remote, 1);
     if (desc == -1) {
         errorf("tcp_cmd_open() failure");
         return -1;
@@ -120,7 +120,10 @@ app_main(void)
         }
         debugf("%zd bytes data received", n);
         hexdump(stderr, buf, n);
-        tcp_cmd_send(desc, buf, n);
+
+        char msg[128];
+        size_t msg_len = snprintf(msg, sizeof(msg), "Received!: %.*s", (int)n, buf);
+        tcp_cmd_send(desc, (uint8_t *)msg, msg_len);
     }
 
     tcp_cmd_close(desc);
