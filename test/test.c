@@ -103,6 +103,7 @@ app_main(void)
     ip_endp_t local, remote;
     uint8_t buf[128];
     ssize_t n;
+    char msg[128];
 
     ip_endp_pton("0.0.0.0:0", &local);
     ip_endp_pton("192.0.2.1:10007", &remote);
@@ -121,7 +122,6 @@ app_main(void)
         debugf("%zd bytes data received", n);
         hexdump(stderr, buf, n);
 
-        char msg[128];
         size_t msg_len = snprintf(msg, sizeof(msg), "Received!: %.*s", (int)n, buf);
         tcp_cmd_send(desc, (uint8_t *)msg, msg_len);
     }
@@ -141,6 +141,7 @@ main(void)
         return -1;
     }
     ret = app_main();
+    sleep(1);
     if (cleanup() == -1) {
         errorf("cleanup() failure");
         return -1;
