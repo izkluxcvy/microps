@@ -10,14 +10,12 @@
 #include "util.h"
 #include "net.h"
 #include "ip.h"
-#include "icmp.h"
-#include "udp.h"
-#include "tcp.h"
 
 #include "driver/loopback.h"
 #include "driver/ether_tap.h"
 
 #include "test.h"
+#include "sock.h"
 
 static volatile sig_atomic_t terminate;
 
@@ -96,62 +94,85 @@ cleanup(void)
     return 0;
 }
 
-static int
-app_main(void)
+static void
+conn_main(int soc)
 {
-    int desc, new_desc;
-    ip_endp_t local, remote;
-    char ep[IP_ENDP_STR_LEN];
-    uint8_t buf[1024];
+    uint8_t buf[128];
     ssize_t n;
     char msg[128];
 
-    ip_endp_pton("0.0.0.0:7", &local);
-
-    desc = tcp_cmd_socket();
-    if (desc == -1) {
-        errorf("tcp_cmd_socket() failure");
-        return -1;
-    }
-
-    if (tcp_cmd_bind(desc, local) == -1) {
-        errorf("tcp_cmd_bind() failure");
-        tcp_cmd_close(desc);
-        return -1;
-    }
-
-    if (tcp_cmd_listen(desc, 2) == -1) {
-        errorf("tcp_cmd_listen() failure");
-        tcp_cmd_close(desc);
-        return -1;
-    }
-
-    new_desc = tcp_cmd_accept(desc, &remote);
-    if (new_desc == -1) {
-        errorf("tcp_cmd_accept() failure");
-        return -1;
-    }
-
-    debugf("connection from %s, desc=%d",
-           ip_endp_ntop(remote, ep, sizeof(ep)),
-           new_desc);
-
-    debugf("press Ctrl-C to terminate");
     while (!terminate) {
-        n = tcp_cmd_receive(new_desc, buf, sizeof(buf));
-        if (n <= 0) {
-            warnf("connection close by remote");
+        n = sock_recv(soc, buf, sizeof(buf));
+        if (n == -1) {
+            if (errno == EINTR) {
+                continue;
+            }
+            errorf("sock_recv() failure");
             break;
         }
-        debugf("%zd bytes data received", n);
-        hexdump(stderr, buf, n);
 
+        if (n == 0) {
+            debugf("connection closed by peer");
+            break;
+        }
+        
+        infof("received %zd bytes", n);
+        hexdump(stderr, buf, n);
+        
         int msg_len = snprintf(msg, sizeof(msg), "Received!: %.*s", (int)n, buf);
-        tcp_cmd_send(new_desc, (uint8_t *)msg, msg_len);
+        if (sock_send(soc, msg, msg_len) == -1) {
+            errorf("sock_send() failure");
+            break;
+        }
+    }
+    sock_close(soc);
+}
+
+static int
+app_main(void)
+{
+    int soc, acc, remote_len;
+    struct sockaddr_in local, remote;
+    char addr[IP_ADDR_STR_LEN];
+
+    soc = sock_open(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (soc == -1) {
+        errorf("sock_open() failure");
+        return -1;
     }
 
-    tcp_cmd_close(new_desc);
-    tcp_cmd_close(desc);
+    local.sin_addr.s_addr = INADDR_ANY;
+    local.sin_port = hton16(7);
+    if (sock_bind(soc, (struct sockaddr *)&local, sizeof(local)) == -1) {
+        errorf("sock_bind() failure");
+        sock_close(soc);
+        return -1;
+    }
+
+    if (sock_listen(soc, 5) == -1) {
+        errorf("sock_listen() failure");
+        sock_close(soc);
+        return -1;
+    }
+
+    debugf("press Ctrl+C to terminate");
+    while (!terminate) {
+        remote_len = sizeof(remote);
+        acc = sock_accept(soc, (struct sockaddr *)&remote, &remote_len);
+        if (acc == -1) {
+            if (errno == EINTR) {
+                debugf("interrupted");
+                continue;
+            }
+            errorf("sock_accept() failure");
+            return -1;
+        }
+        debugf("connection accepted, remote=%s:%u",
+               ip_addr_ntop(remote.sin_addr.s_addr, addr, sizeof(addr)),
+               ntoh16(remote.sin_port));
+        conn_main(acc);
+    }
+    sock_close(soc);
     debugf("terminate");
     return 0;
 }
