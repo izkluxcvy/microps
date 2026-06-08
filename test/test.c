@@ -99,33 +99,58 @@ cleanup(void)
 static int
 app_main(void)
 {
-    int desc;
+    int desc, new_desc;
     ip_endp_t local, remote;
-    uint8_t buf[128];
+    char ep[IP_ENDP_STR_LEN];
+    uint8_t buf[1024];
     ssize_t n;
     char msg[128];
 
-    ip_endp_pton("0.0.0.0:0", &local);
-    ip_endp_pton("192.0.2.1:10007", &remote);
-    desc = tcp_cmd_open(local, remote, 1);
+    ip_endp_pton("0.0.0.0:7", &local);
+
+    desc = tcp_cmd_socket();
     if (desc == -1) {
-        errorf("tcp_cmd_open() failure");
+        errorf("tcp_cmd_socket() failure");
         return -1;
     }
 
+    if (tcp_cmd_bind(desc, local) == -1) {
+        errorf("tcp_cmd_bind() failure");
+        tcp_cmd_close(desc);
+        return -1;
+    }
+
+    if (tcp_cmd_listen(desc, 2) == -1) {
+        errorf("tcp_cmd_listen() failure");
+        tcp_cmd_close(desc);
+        return -1;
+    }
+
+    new_desc = tcp_cmd_accept(desc, &remote);
+    if (new_desc == -1) {
+        errorf("tcp_cmd_accept() failure");
+        return -1;
+    }
+
+    debugf("connection from %s, desc=%d",
+           ip_endp_ntop(remote, ep, sizeof(ep)),
+           new_desc);
+
     debugf("press Ctrl-C to terminate");
     while (!terminate) {
-        n = tcp_cmd_receive(desc, buf, sizeof(buf));
+        n = tcp_cmd_receive(new_desc, buf, sizeof(buf));
         if (n <= 0) {
+            warnf("connection close by remote");
             break;
         }
         debugf("%zd bytes data received", n);
         hexdump(stderr, buf, n);
 
-        size_t msg_len = snprintf(msg, sizeof(msg), "Received!: %.*s", (int)n, buf);
-        tcp_cmd_send(desc, (uint8_t *)msg, msg_len);
+        int msg_len = snprintf(msg, sizeof(msg), "Received!: %.*s", (int)n, buf);
+        tcp_cmd_send(new_desc, (uint8_t *)msg, msg_len);
     }
 
+    tcp_cmd_close(new_desc);
     tcp_cmd_close(desc);
     debugf("terminate");
     return 0;
@@ -141,7 +166,7 @@ main(void)
         return -1;
     }
     ret = app_main();
-    sleep(35);
+    sleep(1);
     if (cleanup() == -1) {
         errorf("cleanup() failure");
         return -1;
