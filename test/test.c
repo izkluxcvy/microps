@@ -95,11 +95,11 @@ cleanup(void)
 }
 
 static void
-conn_main(int soc)
+http_handler(int soc)
 {
-    uint8_t buf[128];
+    uint8_t buf[1024];
     ssize_t n;
-    char msg[128];
+    char msg[1024];
 
     while (!terminate) {
         n = sock_recv(soc, buf, sizeof(buf));
@@ -119,7 +119,15 @@ conn_main(int soc)
         infof("received %zd bytes", n);
         hexdump(stderr, buf, n);
         
-        int msg_len = snprintf(msg, sizeof(msg), "Received!: %.*s", (int)n, buf);
+        char *http_body = "<h1>Hello from DIY TCP/IP Stack!</h1>\r\n"
+                          "<p>simple http server.</p>\r\n";
+        int msg_len = snprintf(msg, sizeof(msg),
+                               "HTTP/1.1 200 OK\r\n"
+                               "Content-Type: text/html\r\n"
+                               "Content-Length: %zu\r\n"
+                               "\r\n"
+                               "%s",
+                               strlen(http_body), http_body);
         if (sock_send(soc, msg, msg_len) == -1) {
             errorf("sock_send() failure");
             break;
@@ -142,7 +150,7 @@ app_main(void)
     }
 
     local.sin_addr.s_addr = INADDR_ANY;
-    local.sin_port = hton16(7);
+    local.sin_port = hton16(8080);
     if (sock_bind(soc, (struct sockaddr *)&local, sizeof(local)) == -1) {
         errorf("sock_bind() failure");
         sock_close(soc);
@@ -170,7 +178,7 @@ app_main(void)
         debugf("connection accepted, remote=%s:%u",
                ip_addr_ntop(remote.sin_addr.s_addr, addr, sizeof(addr)),
                ntoh16(remote.sin_port));
-        conn_main(acc);
+        http_handler(acc);
     }
     sock_close(soc);
     debugf("terminate");
